@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+import dataclasses
+from typing import List
+import time
+import sched
+import pandas as pd
+
+from .status import CourseStatusRequester, SessionInfo, SessionStatus
+
+class USNotifier:
+    def __init__(self, interval: int) -> None:
+        self.watched_urls = set()
+        self.scheduler = sched.scheduler(time.time, time.sleep)
+        self.requester = CourseStatusRequester()
+        self.current_session_infos = None
+        self.interval = interval
+
+    def add_watch_url(self, url: str):
+        self.watched_urls.add(url)
+
+    def loop(self):
+        for url in self.watched_urls:
+            next_session_infos = self.requester.request_url(url)
+            new_available = self.new_available_places(next_session_infos)
+
+        self.scheduler.enter(self.interval, 1, self.loop, ())
+
+    def start(self):
+        self.scheduler.enter(self.interval, 1, self.loop, ())
+        self.scheduler.run()
+
+    def new_available_places(self, next_session_infos: List[SessionInfo]) -> List[SessionInfo]:
+        if self.current_session_infos is None:
+            self.current_session_infos = next_session_infos
+            return self.filter_available(self.current_session_infos)
+
+        session_dicts = list(map(lambda info : dataclasses.asdict(info), self.current_session_infos))
+        next_session_dicts = list(map(lambda info : dataclasses.asdict(info), next_session_infos))
+
+        current_df = pd.DataFrame.from_records(session_dicts)
+        next_df = pd.DataFrame.from_records(next_session_dicts)
+
+        merged_df = current_df.merge(next_df, on=["day", "datetime", "hour"], suffixes=("_current", "_next"))
+
+        # The new available places are the ones which were not available previously and are now available
+        new_available = merged_df[(merged_df["status_current"] != SessionStatus.AVAILABLE) & 
+                                  (merged_df["status_next"] == SessionStatus.AVAILABLE)]
+        
+        # Drop old informations
+        new_available = new_available.drop(columns=["status_current", "num_places_current"])
+        new_available = new_available.rename(columns={"status_next" : "status", "num_places_next" : "num_places"})
+
+        new_available_list = list(map(lambda x: SessionInfo(**x), new_available.to_dict("records")))
+        return new_available_list
+
+    def filter_available(self, session_infos: List[SessionInfo]) -> List[SessionInfo]:
+        return list(filter(lambda info : info.status == SessionStatus.AVAILABLE, session_infos))
+
+
