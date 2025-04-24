@@ -1,34 +1,57 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
-from typing import List
+from typing import Awaitable, Callable, List
 import time
 import sched
 import pandas as pd
+import logging
 
 from .status import CourseStatusRequester, SessionInfo, SessionStatus
 
+
 class USNotifier:
-    def __init__(self, interval: int) -> None:
+    def __init__(self, interval: int, callback: Callable[[List[SessionInfo]], Awaitable[None]]) -> None:
         self.watched_urls = set()
-        self.scheduler = sched.scheduler(time.time, time.sleep)
         self.requester = CourseStatusRequester()
         self.current_session_infos = None
         self.interval = interval
+        self.callback = callback
+        self.should_run = True
 
     def add_watch_url(self, url: str):
         self.watched_urls.add(url)
 
-    def loop(self):
-        for url in self.watched_urls:
-            next_session_infos = self.requester.request_url(url)
-            new_available = self.new_available_places(next_session_infos)
+    async def loop(self):
+        while True:
+            if not self.should_run:
+                return
 
-        self.scheduler.enter(self.interval, 1, self.loop, ())
+            for url in self.watched_urls:
+                next_session_infos = self.requester.request_url(url)
+                new_available = self.new_available_places(next_session_infos)
 
-    def start(self):
-        self.scheduler.enter(self.interval, 1, self.loop, ())
-        self.scheduler.run()
+                logging.info(f"New available places:\n{new_available}")
+
+                await self.callback(new_available)
+            
+            logging.info(f"Next call is in {self.interval} seconds")
+            await asyncio.sleep(self.interval)
+
+
+    async def start(self):
+        await self.loop()
+        logging.info("Launched scheduler")
+
+    def stop(self):
+        self.should_run = False
+
+    def set_interval(self, interval: int):
+        if interval <= 0:
+            raise ValueError(f"Interval cannot be negative or 0: given interval is {interval}")
+
+        self.interval = interval
 
     def new_available_places(self, next_session_infos: List[SessionInfo]) -> List[SessionInfo]:
         if self.current_session_infos is None:
@@ -52,6 +75,10 @@ class USNotifier:
         new_available = new_available.rename(columns={"status_next" : "status", "num_places_next" : "num_places"})
 
         new_available_list = list(map(lambda x: SessionInfo(**x), new_available.to_dict("records")))
+
+        # Set current session infos to the newly update one
+        self.current_session_infos = next_session_infos
+
         return new_available_list
 
     def filter_available(self, session_infos: List[SessionInfo]) -> List[SessionInfo]:

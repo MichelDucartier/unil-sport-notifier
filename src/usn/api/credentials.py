@@ -13,5 +13,4 @@ class UserCredentials:
 
         self.username = os.getenv(UserCredentials.USERNAME_KEY, "")
         self.password = os.getenv(UserCredentials.PASSWORD_KEY, "")
-
         

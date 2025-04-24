@@ -3,7 +3,7 @@ from enum import Enum
 from http.cookiejar import Cookie
 import logging
 import re
-from typing import Dict, List
+from typing import Dict, List, Optional
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import ParseResult, urlparse, urlsplit, urljoin, urlunparse
@@ -16,6 +16,7 @@ class SessionStatus(Enum):
     FULL = "full"
     AVAILABLE = "btn_insc"
     UNAVAILABLE = "close"
+    ENROLLED = "in"
 
 @dataclass
 class SessionInfo:
@@ -69,11 +70,14 @@ class CourseStatusRequester:
 
             for session_item in session_items:
                 session_info = self.parse_session_info(base_url, session_item)
+                if session_info is None:
+                    continue
+
                 session_infos.append(session_info)
 
         return session_infos
 
-    def parse_session_info(self, base_url: ParseResult, session_item: BeautifulSoup) -> SessionInfo:
+    def parse_session_info(self, base_url: ParseResult, session_item: BeautifulSoup) -> Optional[SessionInfo]:
         day = session_item.find("span", {"class": "day"}).text
         datetime = session_item.find("span", {"class": "dt"}).text
         hour = session_item.find("span", {"class": "hour"}).text
@@ -82,11 +86,11 @@ class CourseStatusRequester:
         inner = status.findChild()
         status_string = inner["class"][0]
         status = SessionStatus(status_string)
-        
+
         num_places = 0
         if status == SessionStatus.AVAILABLE:
             num_places = self.get_available_places(base_url, inner["href"])
-
+        
         return SessionInfo(
                 day=day,
                 datetime=datetime,
