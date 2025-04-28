@@ -32,6 +32,8 @@ class USNotifier:
                 next_session_infos = self.requester.request_url(url)
                 new_available = self.new_available_places(next_session_infos)
 
+                self.current_session_infos = next_session_infos
+
                 logging.info(f"New available places:\n{new_available}")
 
                 await self.callback(new_available)
@@ -55,8 +57,7 @@ class USNotifier:
 
     def new_available_places(self, next_session_infos: List[SessionInfo]) -> List[SessionInfo]:
         if self.current_session_infos is None:
-            self.current_session_infos = next_session_infos
-            return self.filter_available(self.current_session_infos)
+            return self.filter_available(next_session_infos)
 
         session_dicts = list(map(lambda info : dataclasses.asdict(info), self.current_session_infos))
         next_session_dicts = list(map(lambda info : dataclasses.asdict(info), next_session_infos))
@@ -75,9 +76,6 @@ class USNotifier:
         new_available = new_available.rename(columns={"status_next" : "status", "num_places_next" : "num_places"})
 
         new_available_list = list(map(lambda x: SessionInfo(**x), new_available.to_dict("records")))
-
-        # Set current session infos to the newly update one
-        self.current_session_infos = next_session_infos
 
         return new_available_list
 
