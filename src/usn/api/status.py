@@ -17,6 +17,7 @@ class SessionStatus(Enum):
     AVAILABLE = "btn_insc"
     UNAVAILABLE = "close"
     ENROLLED = "in"
+    OLD = "old"
 
 @dataclass
 class SessionInfo:
