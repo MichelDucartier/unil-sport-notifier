@@ -25,7 +25,7 @@ class SessionInfo:
     datetime: str
     hour: str
     status: SessionStatus
-    num_places: int = 0
+    num_spots: int = 0
 
 class CourseStatusRequester:
     SESSION_COOKIE_NAME = "PHPSESSID"
@@ -88,19 +88,19 @@ class CourseStatusRequester:
         status_string = inner["class"][0]
         status = SessionStatus(status_string)
 
-        num_places = 0
+        num_spots = 0
         if status == SessionStatus.AVAILABLE:
-            num_places = self.get_available_places(base_url, inner["href"])
+            num_spots = self.get_available_spots(base_url, inner["href"])
         
         return SessionInfo(
                 day=day,
                 datetime=datetime,
                 hour=hour,
                 status=status,
-                num_places=num_places
+                num_spots=num_spots
         )
 
-    def get_available_places(self, base_url: ParseResult, relative_href: str) -> int:
+    def get_available_spots(self, base_url: ParseResult, relative_href: str) -> int:
         session_url = urlunparse((
                 base_url.scheme,
                 base_url.netloc,

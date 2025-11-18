@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from operator import add
 from typing import Awaitable, Callable, List
 import time
 import sched
@@ -19,31 +20,38 @@ class USNotifier:
         self.interval = interval
         self.callback = callback
         self.should_run = True
+        self.is_running = False
 
     def add_watch_url(self, url: str):
         self.watched_urls.add(url)
-
+    
     async def loop(self):
         while True:
             if not self.should_run:
                 return
 
-            for url in self.watched_urls:
-                next_session_infos = self.requester.request_url(url)
-                new_available = self.new_available_places(next_session_infos)
+            try:
+                for url in self.watched_urls:
+                    next_session_infos = self.requester.request_url(url)
+                    new_available = self.new_available_spots(next_session_infos)
 
-                self.current_session_infos = next_session_infos
+                    self.current_session_infos = next_session_infos
 
-                logging.info(f"New available places:\n{new_available}")
+                    logging.info(f"New available spots:\n{new_available}")
 
-                await self.callback(new_available)
-            
+                    await self.callback(new_available)
+
+            except Exception as e:
+                logging.error(f"USNotifier loop error: {e}", exc_info=True)
+
             logging.info(f"Next call is in {self.interval} seconds")
             await asyncio.sleep(self.interval)
 
-
+    
     async def start(self):
+        self.is_running = True
         await self.loop()
+        self.is_running = False
         logging.info("Launched scheduler")
 
     def stop(self):
@@ -55,7 +63,7 @@ class USNotifier:
 
         self.interval = interval
 
-    def new_available_places(self, next_session_infos: List[SessionInfo]) -> List[SessionInfo]:
+    def new_available_spots(self, next_session_infos: List[SessionInfo]) -> List[SessionInfo]:
         if self.current_session_infos is None:
             return self.filter_available(next_session_infos)
 
@@ -67,13 +75,13 @@ class USNotifier:
 
         merged_df = current_df.merge(next_df, on=["day", "datetime", "hour"], suffixes=("_current", "_next"))
 
-        # The new available places are the ones which were not available previously and are now available
+        # The new available spots are the ones which were not available previously and are now available
         new_available = merged_df[(merged_df["status_current"] != SessionStatus.AVAILABLE) & 
                                   (merged_df["status_next"] == SessionStatus.AVAILABLE)]
         
         # Drop old informations
-        new_available = new_available.drop(columns=["status_current", "num_places_current"])
-        new_available = new_available.rename(columns={"status_next" : "status", "num_places_next" : "num_places"})
+        new_available = new_available.drop(columns=["status_current", "num_spots_current"])
+        new_available = new_available.rename(columns={"status_next" : "status", "num_spots_next" : "num_spots"})
 
         new_available_list = list(map(lambda x: SessionInfo(**x), new_available.to_dict("records")))
 

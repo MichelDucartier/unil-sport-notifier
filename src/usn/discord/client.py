@@ -2,14 +2,11 @@
 
 import discord
 from discord.ext import commands
-from discord import app_commands
-from discord.message import Message
 from discord import Intents
 from typing import Any, List
 import logging
 import asyncio
 
-from .credentials import DiscordCredentials
 from ..api.notifier import USNotifier
 from ..api.status import SessionInfo
 
@@ -39,6 +36,13 @@ class USNDiscordBot(commands.Bot):
     async def on_ready(self):
         print(f"Logged in as {self.user}")
 
+    async def on_resumed(self):
+        logging.info("Bot reconnected — ensuring notifier is running.")
+
+        # If your notifier has a flag to check its state
+        if not self.usnotifier.is_running and self.usnotifier.should_run:
+            self.loop.create_task(self.usnotifier.start())
+
     async def watch_url(self, interaction: discord.Interaction, course_url: str):
         self.usnotifier.add_watch_url(course_url)
         await interaction.response.send_message(f"Watching course {course_url}")
@@ -55,7 +59,7 @@ class USNDiscordBot(commands.Bot):
             await interaction.response.send_message(f"Set interval failed with error {e}")
 
     async def launch(self, interaction: discord.Interaction):
-        asyncio.get_event_loop().create_task(self.usnotifier.start())
+        self.loop.create_task(self.usnotifier.start())
         await interaction.response.send_message(f"Launched application!")
 
     async def stop(self, interaction: discord.Interaction):
@@ -81,7 +85,7 @@ class USNDiscordBot(commands.Bot):
     def format_session_infos(self, session_infos: List[SessionInfo]) -> str:
         formatted_string = ""
         for info in session_infos:
-            formatted_string += f"@everyone 📅 {info.day} {info.datetime} at 🕙 {info.hour}: {info.num_places} available !!\n"
+            formatted_string += f"@everyone 📅 {info.day} {info.datetime} at 🕙 {info.hour}: {info.num_spots} available !!\n"
         
         return formatted_string
     
