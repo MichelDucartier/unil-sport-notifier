@@ -73,7 +73,7 @@ class USNotifier:
         current_df = pd.DataFrame.from_records(session_dicts)
         next_df = pd.DataFrame.from_records(next_session_dicts)
 
-        merged_df = current_df.merge(next_df, on=["day", "datetime", "hour"], suffixes=("_current", "_next"))
+        merged_df = current_df.merge(next_df, on=["day", "datetime", "hour", "sport_title", "room"], suffixes=("_current", "_next"))
 
         # The new available spots are the ones which were not available previously and are now available
         new_available = merged_df[(merged_df["status_current"] != SessionStatus.AVAILABLE) & 

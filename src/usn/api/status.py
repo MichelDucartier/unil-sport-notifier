@@ -25,6 +25,8 @@ class SessionInfo:
     datetime: str
     hour: str
     status: SessionStatus
+    sport_title: str = ""
+    room: str = ""
     num_spots: int = 0
 
 class CourseStatusRequester:
@@ -60,21 +62,44 @@ class CourseStatusRequester:
 
     def parse_response(self, base_url: ParseResult, raw_response: str) -> List[SessionInfo]:
         soup = BeautifulSoup(raw_response, "html.parser")
-        course_items = soup.find_all("div", {"class": "cours_items"})
+        
+        # Extract the "Course" div
+        sport = soup.find("dl")
+        
+        if sport is None:
+            logging.warning(f"No sport found for course: {base_url}! This may indicate a bad parsing")
+            return []
+
+        rooms = sport.find_all("dl")
+        sport_title = sport.find("dt").string
 
         session_infos = []
 
-        for course_item in course_items:
-            # Each course item corresponds to a certain course which happens in the same room
-            # Each course can contain many sessions (weekly session for instance)
-            session_items = course_item.find_all("div", {"class" : "item"})
+        for room in rooms:
+            room_div = room.find("dt")
+            if room_div is None or room_div.string is None:
+                logging.warning(f"No sport found for course: {base_url}! This may indicate a bad parsing")
+                return []
 
-            for session_item in session_items:
-                session_info = self.parse_session_info(base_url, session_item)
-                if session_info is None:
-                    continue
+            room_name = re.sub(r"[^a-zA-Z0-9-]+", "", room_div.string)
 
-                session_infos.append(session_info)
+            course_items = room.find_all("div", {"class": "cours_items"})
+            
+            for course_item in course_items:
+                # Each course item corresponds to a certain course which happens in the same room
+                # Each course can contain many sessions (weekly session for instance)
+                session_items = course_item.find_all("div", {"class" : "item"})
+
+                for session_item in session_items:
+                    session_info = self.parse_session_info(base_url, session_item)
+                    if session_info is None:
+                        continue
+                    
+                    # Update with correct room name
+                    session_info.room = room_name
+                    session_info.sport_title = sport_title
+
+                    session_infos.append(session_info)
 
         return session_infos
 

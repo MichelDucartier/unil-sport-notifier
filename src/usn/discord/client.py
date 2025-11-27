@@ -85,7 +85,7 @@ class USNDiscordBot(commands.Bot):
     def format_session_infos(self, session_infos: List[SessionInfo]) -> str:
         formatted_string = ""
         for info in session_infos:
-            formatted_string += f"@everyone 📅 {info.day} {info.datetime} at 🕙 {info.hour}: {info.num_spots} available !!\n"
+            formatted_string += f"@everyone 🏐 {info.sport_title} on 📅 {info.day} {info.datetime} at 🕙 {info.hour}: {info.num_spots} available !!\n"
         
         return formatted_string
     
