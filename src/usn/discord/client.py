@@ -103,13 +103,17 @@ class USNDiscordBot(commands.Bot):
 
         grouped_sessions = self.group_by_course(session_infos)
 
-        for course_url, channel_ids in self.alert_channel_id.items():
-            sessions = grouped_sessions.get(course_url, [])
-            
+        for sport_title, channel_ids in self.alert_channel_id.items():
+            sessions = grouped_sessions.get(sport_title, [])
+
+            logging.info(f"For {sport_title}: {sessions}")
+
             if len(sessions) == 0:
                 return
-
+            
             formatted_alert = self.format_session_infos(sessions)
+
+            logging.info(f"Sending {formatted_alert}")
 
             for channel_id in channel_ids:
                 channel = self.get_channel(channel_id)
