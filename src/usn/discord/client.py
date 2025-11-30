@@ -27,10 +27,19 @@ class USNDiscordBot(commands.Bot):
         self.tree.command(name="watch", description="Set a watched course (give the URL)")(self.watch_url)
         self.tree.command(name="setinterval", description="Set an interval")(self.set_interval)
         self.tree.command(name="status", description="Status of the bot")(self.get_status)
+        self.tree.command(name="unsubscribe", description="Unsubscribe this channel from every course")(self.unsubscribe)
 
         self.alert_channel_id = dict()
 
-        # self.loop.create_task(self.usnotifier.start())
+    async def unsubscribe(self, interaction: Interaction):
+        courses = []
+        for course, channel_ids in self.alert_channel_id.items():
+            if interaction.channel_id in channel_ids:
+                self.alert_channel_id[course] = channel_ids.difference({interaction.channel_id})
+                courses.append(course)
+        
+        courses_str = ", ".join(courses)
+        await interaction.response.send_message(f"Unsubscribed <#{interaction.channel_id}> from {courses_str}")
 
     async def get_status(self, interaction: Interaction):
         status = discord.Embed(title="Status", 
@@ -38,6 +47,9 @@ class USNDiscordBot(commands.Bot):
                                color=0x00ff00)
 
         for course, channel_ids in self.alert_channel_id.items():
+            if len(channel_ids) == 0:
+                continue
+
             channels = "**Subscribed channels**:\n"
             for channel_id in channel_ids:
                 channels += f"<#{channel_id}>\n"
