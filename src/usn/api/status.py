@@ -76,7 +76,7 @@ class CourseStatusRequester:
             logging.warning(f"No sport found for course: {base_url}! This may indicate a bad parsing")
             return None
 
-        sport_title = sport.find("dt").string or ""
+        sport_title = sport.find("dt").text or ""
 
         return sport_title, sport
 
@@ -103,7 +103,7 @@ class CourseStatusRequester:
         sport_title, sport = res
         rooms = sport.find_all("dl")
         for room in rooms:
-            room_name = room.find("dt").string
+            room_name = room.find("dt").text
             if room_name is None:
                 logging.warning(f"No room found")
                 return []
