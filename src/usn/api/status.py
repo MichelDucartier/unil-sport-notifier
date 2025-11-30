@@ -3,9 +3,9 @@ from enum import Enum
 from http.cookiejar import Cookie
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 from urllib.parse import ParseResult, urlparse, urlsplit, urljoin, urlunparse
 
 from requests.sessions import RequestsCookieJar
@@ -46,7 +46,14 @@ class CourseStatusRequester:
         if response.status_code != requests.codes["ok"]:
             logging.warning("Authentication failed")
 
-    def request_url(self, url: str) -> List[SessionInfo]:
+    def get_sessions(self, url: str) -> List[SessionInfo]:
+        base_url, response = self._request_url(url)
+        
+        session_infos = self.parse_response(base_url, response)
+        
+        return session_infos
+
+    def _request_url(self, url: str) -> Tuple[ParseResult, str]:
         self.login()
         base_url = urlparse(url, scheme="path")
 
@@ -56,35 +63,54 @@ class CourseStatusRequester:
             logging.warning(f"Request failed for {url} with error {response.text}")
 
         logging.warning(f"Succesfully requested {url}")
-        session_infos = self.parse_response(base_url, response.text)
 
-        return session_infos
-
-    def parse_response(self, base_url: ParseResult, raw_response: str) -> List[SessionInfo]:
-        soup = BeautifulSoup(raw_response, "html.parser")
+        return base_url, response.text
+        
+    def _extract_sport_title(self, base_url: ParseResult, response: str) -> Optional[Tuple[str, Tag]]:
+        soup = BeautifulSoup(response, "html.parser")
         
         # Extract the "Course" div
-        sport = soup.find("dl")
+        sport = soup.find("dl", attrs={"class" : re.compile(r"nav*")})
         
-        if sport is None:
+        if sport is None or sport.find("dt") is None:
             logging.warning(f"No sport found for course: {base_url}! This may indicate a bad parsing")
-            return []
+            return None
 
-        rooms = sport.find_all("dl")
-        sport_title = sport.find("dt").string
+        sport_title = sport.find("dt").string or ""
+
+        return sport_title, sport
+
+
+    def get_sport_title(self, url: str) -> Optional[str]:
+        base_url, response = self._request_url(url)
+        res = self._extract_sport_title(base_url, response)
+
+        if res is None:
+            return None
+
+        title, _ = res
+
+        return title
+        
+    def parse_response(self, base_url: ParseResult, raw_response: str) -> List[SessionInfo]:
+        res = self._extract_sport_title(base_url, raw_response)
+
+        if res is None:
+            return []
 
         session_infos = []
 
+        sport_title, sport = res
+        rooms = sport.find_all("dl")
         for room in rooms:
-            room_div = room.find("dt")
-            if room_div is None or room_div.string is None:
-                logging.warning(f"No sport found for course: {base_url}! This may indicate a bad parsing")
+            room_name = room.find("dt").string
+            if room_name is None:
+                logging.warning(f"No room found")
                 return []
 
-            room_name = re.sub(r"[^a-zA-Z0-9-]+", "", room_div.string)
+            room_name = re.sub("[^A-Za-z0-9 -]", "", room_name)
 
             course_items = room.find_all("div", {"class": "cours_items"})
-            
             for course_item in course_items:
                 # Each course item corresponds to a certain course which happens in the same room
                 # Each course can contain many sessions (weekly session for instance)
@@ -96,8 +122,8 @@ class CourseStatusRequester:
                         continue
                     
                     # Update with correct room name
-                    session_info.room = room_name
                     session_info.sport_title = sport_title
+                    session_info.room = room_name
 
                     session_infos.append(session_info)
 
@@ -122,7 +148,7 @@ class CourseStatusRequester:
                 datetime=datetime,
                 hour=hour,
                 status=status,
-                num_spots=num_spots
+                num_spots=num_spots,
         )
 
     def get_available_spots(self, base_url: ParseResult, relative_href: str) -> int:

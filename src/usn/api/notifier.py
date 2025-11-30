@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from operator import add
-from typing import Awaitable, Callable, List
+from typing import Awaitable, Callable, List, Optional
 import time
 import sched
 import pandas as pd
@@ -16,26 +16,31 @@ class USNotifier:
     def __init__(self, interval: int, callback: Callable[[List[SessionInfo]], Awaitable[None]]) -> None:
         self.watched_urls = set()
         self.requester = CourseStatusRequester()
-        self.current_session_infos = None
+        self.current_session_infos = dict()
         self.interval = interval
         self.callback = callback
         self.should_run = True
         self.is_running = False
 
-    def add_watch_url(self, url: str):
-        self.watched_urls.add(url)
+    def add_watch_url(self, url: str) -> Optional[str]:
+        try:
+            title = self.requester.get_sport_title(url)
+            self.watched_urls.add(url)
+            return title
+        except:
+            return None
     
     async def loop(self):
         while True:
             if not self.should_run:
-                return
+                await asyncio.sleep(self.interval)
 
             try:
                 for url in self.watched_urls:
-                    next_session_infos = self.requester.request_url(url)
-                    new_available = self.new_available_spots(next_session_infos)
+                    next_session_infos = self.requester.get_sessions(url)
+                    new_available = self.new_available_spots(next_session_infos, url)
 
-                    self.current_session_infos = next_session_infos
+                    self.current_session_infos[url] = next_session_infos
 
                     logging.info(f"New available spots:\n{new_available}")
 
@@ -51,8 +56,6 @@ class USNotifier:
     async def start(self):
         self.is_running = True
         await self.loop()
-        self.is_running = False
-        logging.info("Launched scheduler")
 
     def stop(self):
         self.should_run = False
@@ -63,11 +66,11 @@ class USNotifier:
 
         self.interval = interval
 
-    def new_available_spots(self, next_session_infos: List[SessionInfo]) -> List[SessionInfo]:
-        if self.current_session_infos is None:
+    def new_available_spots(self, next_session_infos: List[SessionInfo], url: str) -> List[SessionInfo]:
+        if url not in self.current_session_infos:
             return self.filter_available(next_session_infos)
 
-        session_dicts = list(map(lambda info : dataclasses.asdict(info), self.current_session_infos))
+        session_dicts = list(map(lambda info : dataclasses.asdict(info), self.current_session_infos[url]))
         next_session_dicts = list(map(lambda info : dataclasses.asdict(info), next_session_infos))
 
         current_df = pd.DataFrame.from_records(session_dicts)
